@@ -20,6 +20,10 @@ from adversarial.utils import mkdir, garbage_collect, JSD, MASSBINS
 import rootplotting as rp
 rp.colours.pop(3)  # To remove unused colour from list
 
+#Signal model
+MODEL = 'A2000'
+XVAR = 'lead_jet_pt'
+
 # Global variable definition(s)
 HISTSTYLE = {  # key = signal / passing
     True: {
@@ -201,7 +205,8 @@ def showsave (f):
         c, args, path = f(*args, **kwargs)
 
         # Save
-        if args.save:
+        save = True
+        if save:
             dir = '/'.join(path.split('/')[:-1])
             mkdir(dir)
             suffix = path.split('.')[-1]
@@ -217,7 +222,8 @@ def showsave (f):
             pass
 
         # Show
-        if args.show:
+        show = True
+        if show: #args.show:
             c.show()
             pass
         return

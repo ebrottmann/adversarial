@@ -55,13 +55,15 @@ def main (args):
     from adversarial.models import classifier_model, adversary_model, combined_model, decorrelation_model
 
     # Load data
-    data, features, _ = load_data(args.input + 'data.h5', test=True)
+    data, features, _ = load_data('data/' + args.input, test=True)
 
 
     # Common definitions
     # --------------------------------------------------------------------------
     # -- k-nearest neighbour
-    kNN_var = 'D2-k#minusNN'
+    #kNN_var = 'D2-k#minusNN'
+    #kNN_var = 'ntrk-knn'
+    kNN_var = 'C1_02-knn'
 
     def meaningful_digits (number):
         digits = 0
@@ -70,6 +72,7 @@ def main (args):
             pass
         return '{l:.{d:d}f}'.format(d=digits,l=number)
 
+    """
     # -- Adversarial neural network (ANN) scan
     lambda_reg  = 10.
     lambda_regs = sorted([1., 3., 10.])
@@ -92,23 +95,38 @@ def main (args):
     uboost_var  =  'uBoost(#alpha={:s})'.format(meaningful_digits(uboost_ur))
     uboost_vars = ['uBoost(#alpha={:s})'.format(meaningful_digits(ur)) for ur in uboost_urs]
     uboost_pattern = 'uboost_ur_{{:4.2f}}_te_{:.0f}_rel21_fixed'.format(uboost_eff)
-
+    """
     # Tagger feature collection
-    tagger_features = ['Tau21','Tau21DDT', 'D2', kNN_var, 'D2', 'D2CSS', 'NN', ann_var, 'Adaboost', uboost_var]
+    #tagger_features = ['Tau21','Tau21DDT', 'D2', kNN_var, 'D2', 'D2CSS', 'NN', ann_var, 'Adaboost', uboost_var]
+    #tagger_features = ['lead_jet_ntrk', kNN_var]
+    tagger_features = ['lead_jet_C1_02', kNN_var]
 
 
     # Add variables
     # --------------------------------------------------------------------------
     with Profile("Add variables"):
 
-        # Tau21DDT
-        from run.ddt.common import add_ddt
-        add_ddt(data, path='models/ddt/ddt.pkl.gz')
-
         # D2-kNN
         from run.knn.common import add_knn, VAR as kNN_basevar, EFF as kNN_eff
         print "k-NN base variable: {} (cp. {})".format(kNN_basevar, kNN_var)
-        add_knn(data, newfeat=kNN_var, path='models/knn/knn_{}_{}.pkl.gz'.format(kNN_basevar, kNN_eff))
+        add_knn(data, newfeat=kNN_var, path='models/knn/knn_{}_{}_{}.pkl.gz'.format(kNN_basevar, kNN_eff, MODEL))
+
+
+    # Remove unused variables
+    used_variables = set(tagger_features + ['lead_jet_m', 'lead_jet_pt', 'lead_jet_ntrk', 'lead_jet_C1_02', 'dijetmass', kNN_var, 'weight'])
+    unused_variables = [var for var in list(data) if var not in used_variables]
+    data.drop(columns=unused_variables)
+    gc.collect()
+
+    # Perform performance studies
+    perform_studies (data, args, tagger_features)
+
+    return 0
+
+"""
+        # Tau21DDT
+        from run.ddt.common import add_ddt
+        add_ddt(data, path='models/ddt/ddt.pkl.gz')
 
         # D2-CSS
         from run.css.common import add_css
@@ -117,8 +135,8 @@ def main (args):
         # NN
         from run.adversarial.common import add_nn
         with Profile("NN"):
-            classifier = load_model('models/adversarial/classifier/full/classifier.h5')
-            add_nn(data, classifier, 'NN')
+          classifier = load_model('models/adversarial/classifier/full/classifier.h5')
+          add_nn(data, classifier, 'NN')
             pass
 
         # ANN
@@ -150,22 +168,11 @@ def main (args):
             # Remove `Adaboost` from scan list
             uboost_vars.pop(0)
             pass
-
-        pass
-
-    # Remove unused variables
-    used_variables = set(tagger_features + ann_vars + uboost_vars + ['m', 'pt', 'npv', 'weight_test'])
-    unused_variables = [var for var in list(data) if var not in used_variables]
-    data.drop(columns=unused_variables)
-    gc.collect()
-
-    # Perform performance studies
-    perform_studies (data, args, tagger_features, ann_vars, uboost_vars)
-
-    return 0
+            pass
+"""
 
 
-def perform_studies (data, args, tagger_features, ann_vars, uboost_vars):
+def perform_studies (data, args, tagger_features):
     """
     Method delegating performance studies.
     """
@@ -173,32 +180,37 @@ def perform_studies (data, args, tagger_features, ann_vars, uboost_vars):
     pt_ranges = [None, (200, 500), (500, 1000), (1000, 2000)]
 
     # Perform combined robustness study
+    """
     with Profile("Study: Robustness"):
         for masscut in masscuts:
             studies.robustness_full(data, args, tagger_features, masscut=masscut)
             pass
         pass
+        """
 
     # Perform jet mass distribution comparison study
     with Profile("Study: Jet mass comparison"):
         studies.jetmasscomparison(data, args, tagger_features)
         pass
 
+    """
     # Perform summary plot study
     with Profile("Study: Summary plot"):
         regex_nn = re.compile('\#lambda=[\d\.]+')
         regex_ub = re.compile('\#alpha=[\d\.]+')
 
-        scan_features = {'NN':       map(lambda feat: (feat, regex_nn.search(feat).group(0)), ann_vars),
-                         'Adaboost': map(lambda feat: (feat, regex_ub.search(feat).group(0)), uboost_vars)
-                         }
+       # scan_features = {'NN':       map(lambda feat: (feat, regex_nn.search(feat).group(0)), ann_vars),
+       #                  'Adaboost': map(lambda feat: (feat, regex_ub.search(feat).group(0)), uboost_vars)
+       #                  }
 
         for masscut, pt_range in itertools.product(masscuts, pt_ranges):
             studies.summary(data, args, tagger_features, scan_features, masscut=masscut, pt_range=pt_range)
             pass
         pass
+        
 
     # Perform distributions study
+    
     with Profile("Study: Substructure tagger distributions"):
         mass_ranges = np.linspace(50, 300, 5 + 1, endpoint=True)
         mass_ranges = [None] + zip(mass_ranges[:-1], mass_ranges[1:])
@@ -214,20 +226,21 @@ def perform_studies (data, args, tagger_features, ann_vars, uboost_vars):
             pass
         pass
 
+    
     # Perform JSD study
     with Profile("Study: JSD"):
         for pt_range in pt_ranges:
             studies.jsd(data, args, tagger_features, pt_range)
             pass
         pass
-
+        
     # Perform efficiency study
     with Profile("Study: Efficiency"):
         for feat in tagger_features:
             studies.efficiency(data, args, feat)
             pass
         pass
-
+        """
     return
 
 

@@ -15,7 +15,7 @@ import rootplotting as rp
 
 
 @showsave
-def jetmasscomparison (data, args, features, eff_sig=50):
+def jetmasscomparison (data, args, features, eff_sig=10):
     """
     Perform study of jet mass distributions before and after subtructure cut for
     different substructure taggers.
@@ -34,7 +34,7 @@ def jetmasscomparison (data, args, features, eff_sig=50):
     cuts, msks_pass = dict(), dict()
     for feat in features:
         eff_cut = eff_sig if signal_low(feat) else 100 - eff_sig
-        cut = wpercentile(data.loc[msk_sig, feat].values, eff_cut, weights=data.loc[msk_sig, 'weight_test'].values)
+        cut = wpercentile(data.loc[msk_sig, feat].values, eff_cut, weights=data.loc[msk_sig, 'weight'].values)
         msks_pass[feat] = data[feat] > cut
 
         # Ensure correct cut direction
@@ -44,13 +44,13 @@ def jetmasscomparison (data, args, features, eff_sig=50):
         pass
 
     # Perform plotting
-    c = plot(data, args, features, msks_pass, eff_sig)
+    #c = plot(data, args, features, msks_pass, eff_sig)
 
     # Perform plotting on individual figures
-    plot_individual(data, args, features, msks_pass, eff_sig)
+    c = plot_individual(data, args, features, msks_pass, eff_sig)
 
     # Output
-    path = 'figures/jetmasscomparison__eff_sig_{:d}.pdf'.format(int(eff_sig))
+    path = 'figures/jetmasscomparison__eff_sig_{:d}_{}.pdf'.format(int(eff_sig), MODEL)
 
     return c, args, path
 
@@ -94,7 +94,7 @@ def plot (*argv):
         # Plots
         # -- Dummy, for proper axes
         for ipad, pad in enumerate(c.pads()[1:], 1):
-            pad.hist([ymin], bins=[50, 300], linestyle=0, fillstyle=0, option=('Y+' if ipad % 2 else ''))
+            pad.hist([ymin], bins=[500, 5000], linestyle=0, fillstyle=0, option=('Y+' if ipad % 2 else ''))
             pass
 
         # -- Inclusive
@@ -104,7 +104,7 @@ def plot (*argv):
             histstyle[signal].update(base)
             for ipad, pad in enumerate(c.pads()[1:], 1):
                 histstyle[signal]['option'] = 'HIST'
-                pad.hist(data.loc[msk, 'm'].values, weights=data.loc[msk, 'weight_test'].values, **histstyle[signal])
+                pad.hist(data.loc[msk, 'lead_jet_pt'].values, weights=data.loc[msk, 'weight'].values, **histstyle[signal])
                 pass
             pass
 
@@ -114,7 +114,7 @@ def plot (*argv):
 
         c.pads()[0].legend(header='Inclusive selection:', categories=[
             ("Multijets",   histstyle[False]),
-            ("#it{W} jets", histstyle[True])
+            ("Dark jets", histstyle[True])
             ], xmin=0.18, width= 0.60, ymax=0.28 + 0.07, ymin=0.001 + 0.07, columns=2)
         c.pads()[0]._legends[-1].SetTextSize(style.GetLegendTextSize())
         c.pads()[0]._legends[-1].SetMargin(0.35)
@@ -131,7 +131,7 @@ def plot (*argv):
             cfg.update(opts)
             msk = (data['signal'] == 0) & msks_pass[feat]
             pad = c.pads()[1 + ifeat//2]
-            pad.hist(data.loc[msk, 'm'].values, weights=data.loc[msk, 'weight_test'].values, label=" " + latex(feat, ROOT=True), **cfg)
+            pad.hist(data.loc[msk, 'lead_jet_pt'].values, weights=data.loc[msk, 'weight'].values, label=" " + latex(feat, ROOT=True), **cfg)
             pass
 
         # -- Legend(s)
@@ -140,8 +140,8 @@ def plot (*argv):
             offsety =  0.20 * ((2 - (ipad // 2)) / float(2.))
             pad.legend(width=0.25, xmin=0.68 - offsetx, ymax=0.80 - offsety)
             pad.latex("Tagged multijets:", NDC=True, x=0.93 - offsetx, y=0.84 - offsety, textcolor=ROOT.kGray + 3, textsize=style.GetLegendTextSize() * 0.8, align=31)
-            pad._legends[-1].SetMargin(0.35)
-            pad._legends[-1].SetTextSize(style.GetLegendTextSize())
+            #pad._legends[-1].SetMargin(0.35)
+            #pad._legends[-1].SetTextSize(style.GetLegendTextSize())
             pass
 
         # Formatting pads
@@ -180,7 +180,7 @@ def plot (*argv):
         c.pads()[2].ylabel("#splitline{#splitline{#splitline{#splitline{Fraction of jets}{}}{}}{}}{#splitline{#splitline{}{}}{#splitline{#splitline{}{}}{#splitline{}{}}}}")
         # I have written a _lot_ of ugly code, but this ^ is probably the worst.
 
-        c.pads()[0].text(["#sqrt{s} = 13 TeV,  #it{W} jet tagging",
+        c.pads()[0].text(["#sqrt{s} = 13 TeV,  Dark jet tagging",
                     "Cuts at #varepsilon_{sig}^{rel} = %.0f%%" % eff_sig,
                     ], xmin=0.2, ymax=0.72, qualifier=QUALIFIER)
 
@@ -211,8 +211,8 @@ def plot_individual (*argv):
             style.SetLabelSize(style.GetLabelSize(coord) * scale, coord)
             style.SetTitleSize(style.GetTitleSize(coord) * scale, coord)
             pass
-        #style.SetTextSize      (style.GetTextSize()       * scale)
-        #style.SetLegendTextSize(style.GetLegendTextSize() * (scale + 0.03))
+        style.SetTextSize      (style.GetTextSize()       * scale)
+        style.SetLegendTextSize(style.GetLegendTextSize() * (scale + 0.03))
         style.SetTickLength(0.07,                     'x')
         style.SetTickLength(0.07 * (5./6.) * (2./3.), 'y')
 
@@ -242,32 +242,30 @@ def plot_individual (*argv):
             style.SetLegendTextSize(lts * (0.8 + 0.03 if first else scale + 0.03))
 
             # Canvas
-            c = rp.canvas(batch=not args.show, size=(300, 200))#int(200 * (1.45 if first else 1.))))
+            c = rp.canvas(batch=not args.show, size=(300, 200)) #int(200 * (1.45 if first else 1.))))
 
             if first:
-                opts = dict(xmin=0.185, width=0.60, columns=2)
+                opts = dict(xmin=0.185, width=0.60) #, columns=2)
                 c.legend(header=' ', categories=[
                             ("Multijets",   histstyle[False]),
-                            ("#it{W} jets", histstyle[True])
+                            ("Dark jets", histstyle[True])
                         ], ymax=0.45, **opts)
                 c.legend(header='Inclusive selection:',
                          ymax=0.40, **opts)
-                #c.pad()._legends[-2].SetTextSize(style.GetLegendTextSize())
+                #c.pad()._legends[-2].SetTextSize(stdijetmassyle.GetLegendTextSize())
                 #c.pad()._legends[-1].SetTextSize(style.GetLegendTextSize())
                 c.pad()._legends[-2].SetMargin(0.35)
                 c.pad()._legends[-1].SetMargin(0.35)
 
-                c.text(["#sqrt{s} = 13 TeV,  #it{W} jet tagging",
+                c.text(["#sqrt{s} = 13 TeV,  Dark jet tagging",
                         "Cuts at #varepsilon_{sig}^{rel} = %.0f%%" % eff_sig,
                         ], xmin=0.2, ymax=0.80, qualifier=QUALIFIER)
 
 
             else:
-
-
                 # Plots
                 # -- Dummy, for proper axes
-                c.hist([ymin], bins=[50, 300], linestyle=0, fillstyle=0)
+                c.hist([ymin], bins=[500, 5000], linestyle=0, fillstyle=0)
 
                 # -- Inclusive
                 base = dict(bins=MASSBINS, normalise=True)
@@ -275,7 +273,7 @@ def plot_individual (*argv):
                     msk = data['signal'] == signal
                     histstyle[signal].update(base)
                     histstyle[signal]['option'] = 'HIST'
-                    c.hist(data.loc[msk, 'm'].values, weights=data.loc[msk, 'weight_test'].values, **histstyle[signal])
+                    c.hist(data.loc[msk, XVAR].values, weights=data.loc[msk, 'weight'].values, **histstyle[signal])
                     pass
 
                 for sig in [True, False]:
@@ -292,11 +290,11 @@ def plot_individual (*argv):
                     cfg = dict(**base)
                     cfg.update(opts)
                     msk = (data['signal'] == 0) & msks_pass[feat]
-                    c.hist(data.loc[msk, 'm'].values, weights=data.loc[msk, 'weight_test'].values, label=" " + latex(feat, ROOT=True), **cfg)
+                    c.hist(data.loc[msk, XVAR].values, weights=data.loc[msk, 'weight'].values, label=" " + latex(feat, ROOT=True), **cfg)
                     pass
 
                 # -- Legend(s)
-                y =  0.46  if first else 0.68
+                y =  0.62  if first else 0.76
                 dy = 0.025 if first else 0.04
                 c.legend(width=0.25, xmin=0.63, ymax=y)
                 c.latex("Tagged multijets:", NDC=True, x=0.87, y=y + dy, textcolor=ROOT.kGray + 3, textsize=style.GetLegendTextSize() * 0.9, align=31)
@@ -316,7 +314,7 @@ def plot_individual (*argv):
                 c.pad()._yaxis().SetAxisColor(ROOT.kWhite)  # Remove "double ticks"
 
                 # Decorations
-                c.xlabel("Large-#it{R} jet mass [GeV]")
+                c.xlabel("m_{jj} [GeV]") #("Large-#it{R} jet mass [GeV]")
                 c.ylabel("Fraction of jets")
 
                 c.text(qualifier=QUALIFIER, xmin=0.25, ymax=0.82)
@@ -326,8 +324,8 @@ def plot_individual (*argv):
                 pass
 
             # Save
-            c.save(path = 'figures/jetmasscomparison__eff_sig_{:d}__{}.pdf'.format(int(eff_sig), 'legend' if first else '{}_{}'.format(*feats)))
+            c.save(path = 'figures/jetmasscomparison_individual_eff_sig_{:d}_{}_{}_{}.pdf'.format(int(eff_sig), XVAR, 'legend' if first else '{}_{}'.format(*feats[0]), MODEL)) 
             pass
         pass  # end temprorary style
 
-    return
+    return c
