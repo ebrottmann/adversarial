@@ -15,14 +15,15 @@ from adversarial.utils import wpercentile, loadclf, garbage_collect
 from adversarial.profile import profile
 
 # Common definition(s)
-VAR  = 'D2'   # 'NN' | Substructure variable to decorrelate
-EFF  = 16     # '95' | Fixed backround efficiency at which to perform decorrelation
-VARX = 'rho'  # X-axis variable from which to decorrelate
-VARY = 'pt'   # Y-axis variable from which to decorrelate
+VAR  = 'lead_jet_C1_02'   # 'D2' 'NN' | Substructure variable to decorrelate
+EFF  = 2     # '95' | Fixed backround efficiency at which to perform decorrelation
+MODEL = 'A2000'
+VARX = 'dijetmass'  # X-axis variable from which to decorrelate
+VARY = 'lead_jet_pt'   # Y-axis variable from which to decorrelate
 VARS = [VARX, VARY]
 AXIS = {      # Dict holding (num_bins, axis_min, axis_max) for axis variables
-    'rho': (20, -7.0, -1.0),
-    'pt':  (20, 200., 2000.),
+    'dijetmass': (50, 100, 5000.),
+    'lead_jet_pt':  (20, 200., 2200.),
 }
 
 #### ________________________________________________________________________
@@ -103,7 +104,6 @@ def add_knn (data, feat=VAR, newfeat=None, path=None):
     return
 
 
-
 @profile
 def fill_profile (data):
     """Fill ROOT.TH2F with the measured, weighted values of the `EFF`-percentile
@@ -130,14 +130,13 @@ def fill_profile (data):
         # Percentile
         perc = np.nan
         if np.sum(msk) > 20:  # Ensure sufficient statistics for meaningful percentile
-            perc = wpercentile(data=   data.loc[msk, VAR]          .values, percents=EFF,
-                               weights=data.loc[msk, 'weight_test'].values)
+            perc = wpercentile(data=data.loc[msk, VAR].values, percents=100-EFF, weights=data.loc[msk, 'weight'].values) #wpercentile
             pass
 
         x[i,j] = np.mean(edges[0])
         y[i,j] = np.mean(edges[1])
         z[i,j] = perc
-
+        
         # Set non-zero bin content
         if perc != np.nan:
             profile.SetBinContent(i + 1, j + 1, perc)
@@ -150,5 +149,6 @@ def fill_profile (data):
     # Filter out NaNs
     msk = ~np.isnan(z)
     x, y, z = x[msk], y[msk], z[msk]
+
 
     return profile, (x,y,z)

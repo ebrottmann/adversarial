@@ -30,7 +30,7 @@ def main (args):
     args, cfg = initialise(args)
 
     # Load data
-    data, _, _ = load_data(args.input + 'data.h5', train=True)
+    data, _, _ = load_data('data/' + args.input, train=True)
 
     # -------------------------------------------------------------------------
     ####
@@ -52,10 +52,11 @@ def main (args):
     # -------------------------------------------------------------------------
 
     # Compute background efficiency at sig. eff. = 50%
-    eff_sig = 0.5
-    fpr, tpr, thresholds = roc_curve(data['signal'], data[VAR], sample_weight=data['weight_test'])
+    eff_sig = 0.05
+    fpr, tpr, thresholds = roc_curve(data['signal'], data[VAR], sample_weight=data['weight'])
     idx = np.argmin(np.abs(tpr - eff_sig))
-    print "Background acceptance @ {:.2f}% sig. eff.: {:.2f}% ({} < {:.2f})".format(eff_sig * 100., (1 - fpr[idx]) * 100., VAR, thresholds[idx])
+    print "Background acceptance @ {:.2f}% sig. eff.: {:.2f}% ({} > {:.2f})".format(eff_sig * 100., (fpr[idx]) * 100., VAR, thresholds[idx]) #changed from 1-fpr[idx]
+    #print "Signal efficiency @ {:.2f}% bkg. acc.: {:.2f}% ({} > {:.2f})".format(eff_sig * 100., (fpr[idx]) * 100., VAR, thresholds[idx]) #changed from 1-fpr[idx]
     print "Chosen target efficiency: {:.2f}%".format(EFF)
 
     # Filling profile
@@ -63,15 +64,18 @@ def main (args):
     profile_meas, (x,y,z) = fill_profile(data)
 
     # Format arrays
-    X = np.vstack((x.flatten(), y.flatten())).T
+    X = np.vstack((x.flatten(), y.flatten()))
+    X = X.T
     Y = z.flatten()
 
     # Fit KNN regressor
+    print "debugging more: x.shape = ", X.shape,", y.ndim = ", Y.ndim
+
     knn = KNeighborsRegressor(weights='distance')
     knn.fit(X, Y)
 
     # Save KNN classifier
-    saveclf(knn, 'models/knn/knn_{:s}_{:.0f}.pkl.gz'.format(VAR, EFF))
+    saveclf(knn, 'models/knn/knn_{:s}_{:.0f}_{}.pkl.gz'.format(VAR, EFF, MODEL))
 
     return 0
 

@@ -16,6 +16,7 @@ import root_numpy
 from adversarial.utils import latex, parse_args, initialise, load_data, mkdir, loadclf  #, initialise_backend
 from adversarial.profile import profile, Profile
 from adversarial.constants import *
+from tests.studies import jetmasscomparison
 #from run.adversarial.common import initialise_config
 
 # Local import(s)
@@ -60,7 +61,8 @@ for bound in BOUNDS:
     pass
 
 #ZRANGE = (0.125, 0.325)
-ZRANGE = (0., 2.5)
+#ZRANGE = (30., 90.)
+ZRANGE = (0., 0.5)
 
 
 # Main function definition
@@ -71,7 +73,7 @@ def main (args):
     args, cfg = initialise(args)
 
     # Load data
-    data, _, _ = load_data(args.input + 'data.h5', train=True)
+    data, _, _ = load_data('data/' + args.input, test=True)
     msk_sig = data['signal'] == 1
     msk_bkg = ~msk_sig
 
@@ -99,10 +101,10 @@ def main (args):
 
     # Add k-NN variable
     knnfeat = 'knn'
-    add_knn(data, newfeat=knnfeat, path='models/knn/knn_{}_{}.pkl.gz'.format(VAR, EFF))
+    add_knn(data, newfeat=knnfeat, path='models/knn/knn_{}_{}_{}.pkl.gz'.format(VAR, EFF, MODEL)) 
 
     # Loading KNN classifier
-    knn = loadclf('models/knn/knn_{:s}_{:.0f}.pkl.gz'.format(VAR, EFF))
+    knn = loadclf('models/knn/knn_{:s}_{:.0f}_{}.pkl.gz'.format(VAR, EFF, MODEL))
 
     # Filling fitted profile
     with Profile("Filling fitted profile"):
@@ -186,7 +188,7 @@ def main (args):
 
             red, green, blue = map(np.array, zip(*rgbs))
             nb_cols = len(rgbs)
-            stops = np.array([0] + list(np.linspace(0, 1, nb_cols - 1, endpoint=True) * (1. - EFF / 100.) + EFF / 100.))
+            stops = np.array([0] + list(np.linspace(0, 1, nb_cols - 1, endpoint=True) * (1. - EFF / 100.) + EFF / 100.)) # 1. - EFF?
             pass
 
         ROOT.TColor.CreateGradientColorTable(nb_cols, stops, red, green, blue, NB_CONTOUR)
@@ -203,9 +205,9 @@ def main (args):
         effs = list()
         for edges in zip(bins[1][:-1], bins[1][1:]):
             msk_bin  = (data[VARY] > edges[0]) & (data[VARY] < edges[1])
-            msk_pass =  data[knnfeat] < 0
-            num = data.loc[msk & msk_bin & msk_pass, 'weight_test'].values.sum()
-            den = data.loc[msk & msk_bin,            'weight_test'].values.sum()
+            msk_pass =  data[knnfeat] > 0 # <?
+            num = data.loc[msk & msk_bin & msk_pass, 'weight'].values.sum()
+            den = data.loc[msk & msk_bin,            'weight'].values.sum()
             effs.append(num/den)
             pass
 
@@ -222,13 +224,18 @@ def main (args):
 
             # Set non-zero bin content
             if np.sum(msk & msk_bin):
-                msk_pass = data_[knnfeat] < 0
-                num = data.loc[msk & msk_bin & msk_pass, 'weight_test'].values.sum()
-                den = data.loc[msk & msk_bin,            'weight_test'].values.sum()
+                msk_pass = data_[knnfeat] > 0
+                num = data.loc[msk & msk_bin & msk_pass, 'weight'].values.sum()
+                den = data.loc[msk & msk_bin,            'weight'].values.sum()
+                #if den < 1: print den
                 eff = num/den
                 profile.SetBinContent(i + 1, j + 1, eff)
                 pass
             pass
+
+
+        #features = ['knn']
+        #jetmasscomparison(data, args, features, 90)
 
         c = rp.canvas(batch=True)
         pad = c.pads()[0]._bare()
@@ -238,8 +245,9 @@ def main (args):
         pad.SetTopMargin(0.10)
 
         # Styling
-        profile.GetXaxis().SetTitle("Large-#it{R} jet " + latex(VARX, ROOT=True) + " = log(m^{2}/p_{T}^{2})")
-        profile.GetYaxis().SetTitle("Large-#it{R} jet " + latex(VARY, ROOT=True) + " [GeV]")
+        profile.GetXaxis().SetTitle( latex(VARX, ROOT=True) + "[GeV]")# + " = log(m^{2}/p_{T}^{2})")
+        #profile.GetXaxis().SetTitle("Large-#it{R} jet " + latex(VARX, ROOT=True))# + " = log(m^{2}/p_{T}^{2})")
+        profile.GetYaxis().SetTitle( latex(VARY, ROOT=True) + " [GeV]")
         profile.GetZaxis().SetTitle("Selection efficiency for %s^{(%s%%)}" % (latex(VAR, ROOT=True), EFF))
 
         profile.GetYaxis().SetNdivisions(505)
@@ -247,7 +255,7 @@ def main (args):
         profile.GetXaxis().SetTitleOffset(1.4)
         profile.GetYaxis().SetTitleOffset(1.8)
         profile.GetZaxis().SetTitleOffset(1.3)
-        zrange = (0., 1.)
+        zrange = (0., 0.5)
         if zrange:
             profile.GetZaxis().SetRangeUser(*zrange)
             pass
@@ -258,7 +266,7 @@ def main (args):
 
         # Decorations
         c.text(qualifier=QUALIFIER, ymax=0.92, xmin=0.15)
-        c.text(["#sqrt{s} = 13 TeV", "#it{W} jets" if sig else "Multijets"], ATLAS=False)
+        c.text(["#sqrt{s} = 13 TeV", "Model" + MODEL if sig else "Multijets"], ATLAS=False)
 
         # -- Efficiencies
         xaxis = profile.GetXaxis()
@@ -277,12 +285,12 @@ def main (args):
         # -- Bounds
         BOUNDS[0].DrawCopy("SAME")
         BOUNDS[1].DrawCopy("SAME")
-        c.latex("m > 50 GeV",  -4.5, BOUNDS[0].Eval(-4.5) + 30, align=21, angle=-37, textsize=13, textcolor=ROOT.kGray + 3)
-        c.latex("m < 300 GeV", -2.5, BOUNDS[1].Eval(-2.5) - 30, align=23, angle=-57, textsize=13, textcolor=ROOT.kGray + 3)
+        #c.latex("m > 50 GeV",  -4.5, BOUNDS[0].Eval(-4.5) + 30, align=21, angle=-37, textsize=13, textcolor=ROOT.kGray + 3)
+        #c.latex("m < 300 GeV", -2.5, BOUNDS[1].Eval(-2.5) - 30, align=23, angle=-57, textsize=13, textcolor=ROOT.kGray + 3)
 
         # Save
         mkdir('figures/knn/')
-        c.save('figures/knn/knn_eff_{}_{:s}_{:.0f}.pdf'.format('sig' if sig else 'bkg', VAR, EFF))
+        c.save('figures/knn/knn_eff_{}_{:s}_{:.0f}_{}.pdf'.format('sig' if sig else 'bkg', VAR, EFF, MODEL))
         pass
 
     return
@@ -302,8 +310,8 @@ def plot (profile, fit):
     pad.SetTopMargin(0.10)
 
     # Styling
-    profile.GetXaxis().SetTitle("Large-#it{R} jet " + latex(VARX, ROOT=True) + " = log(m^{2}/p_{T}^{2})")
-    profile.GetYaxis().SetTitle("Large-#it{R} jet " + latex(VARY, ROOT=True) + " [GeV]")
+    profile.GetXaxis().SetTitle(latex(VARX, ROOT=True) + " [GeV]") #+ " = log(m^{2}/p_{T}^{2})")
+    profile.GetYaxis().SetTitle(latex(VARY, ROOT=True) + " [GeV]")
     profile.GetZaxis().SetTitle("%s %s^{(%s%%)}" % ("#it{k}-NN fitted" if fit else "Measured", latex(VAR, ROOT=True), EFF))
 
     profile.GetYaxis().SetNdivisions(505)
@@ -320,16 +328,16 @@ def plot (profile, fit):
     profile.Draw('COLZ')
     BOUNDS[0].DrawCopy("SAME")
     BOUNDS[1].DrawCopy("SAME")
-    c.latex("m > 50 GeV",  -4.5, BOUNDS[0].Eval(-4.5) + 30, align=21, angle=-37, textsize=13, textcolor=ROOT.kGray + 3)
-    c.latex("m < 300 GeV", -2.5, BOUNDS[1].Eval(-2.5) - 30, align=23, angle=-57, textsize=13, textcolor=ROOT.kGray + 3)
+    #c.latex("m > 50 GeV",  -4.5, BOUNDS[0].Eval(-4.5) + 30, align=21, angle=-37, textsize=13, textcolor=ROOT.kGray + 3)
+    #c.latex("m < 300 GeV", -2.5, BOUNDS[1].Eval(-2.5) - 30, align=23, angle=-57, textsize=13, textcolor=ROOT.kGray + 3)
 
     # Decorations
-    c.text(qualifier=QUALIFIER, ymax=0.92, xmin=0.15)
+    #c.text(qualifier=QUALIFIER, ymax=0.92, xmin=0.15)
     c.text(["#sqrt{s} = 13 TeV", "Multijets"], ATLAS=False, textcolor=ROOT.kWhite)
 
     # Save
     mkdir('figures/knn/')
-    c.save('figures/knn/knn_{}_{:s}_{:.0f}.pdf'.format('fit' if fit else 'profile', VAR, EFF))
+    c.save('figures/knn/knn_{}_{:s}_{:.0f}_{}.pdf'.format('fit' if fit else 'profile', VAR, EFF, MODEL))
     pass
 
 
