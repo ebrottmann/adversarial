@@ -61,8 +61,8 @@ for bound in BOUNDS:
     pass
 
 #ZRANGE = (0.125, 0.325)
-#ZRANGE = (30., 90.)
-ZRANGE = (0., 0.5)
+ZRANGE = (20., 120.)
+#ZRANGE = (0., 0.5)
 
 
 # Main function definition
@@ -104,7 +104,7 @@ def main (args):
     add_knn(data, newfeat=knnfeat, path='models/knn/knn_{}_{}_{}.pkl.gz'.format(VAR, EFF, MODEL)) 
 
     # Loading KNN classifier
-    knn = loadclf('models/knn/knn_{:s}_{:.0f}_{}.pkl.gz'.format(VAR, EFF, MODEL))
+    knn = loadclf('models/knn/knn_{:s}_{}_{}.pkl.gz'.format(VAR, EFF, MODEL))
 
     # Filling fitted profile
     with Profile("Filling fitted profile"):
@@ -255,7 +255,7 @@ def main (args):
         profile.GetXaxis().SetTitleOffset(1.4)
         profile.GetYaxis().SetTitleOffset(1.8)
         profile.GetZaxis().SetTitleOffset(1.3)
-        zrange = (0., 0.5)
+        zrange = (0., 0.3)
         if zrange:
             profile.GetZaxis().SetRangeUser(*zrange)
             pass
@@ -290,7 +290,8 @@ def main (args):
 
         # Save
         mkdir('figures/knn/')
-        c.save('figures/knn/knn_eff_{}_{:s}_{:.0f}_{}.pdf'.format('sig' if sig else 'bkg', VAR, EFF, MODEL))
+        c.save('figures/knn/knn_eff_{}_{:s}_{}_{}.pdf'.format('sig' if sig else 'bkg', VAR, EFF, MODEL))
+        c.save('figures/knn/knn_eff_{}_{:s}_{}_{}.eps'.format('sig' if sig else 'bkg', VAR, EFF, MODEL))
         pass
 
     return
@@ -337,7 +338,8 @@ def plot (profile, fit):
 
     # Save
     mkdir('figures/knn/')
-    c.save('figures/knn/knn_{}_{:s}_{:.0f}_{}.pdf'.format('fit' if fit else 'profile', VAR, EFF, MODEL))
+    c.save('figures/knn/knn_{}_{:s}_{}_{}.pdf'.format('fit' if fit else 'profile', VAR, EFF, MODEL))
+    c.save('figures/knn/knn_{}_{:s}_{}_{}.eps'.format('fit' if fit else 'profile', VAR, EFF, MODEL))
     pass
 
 

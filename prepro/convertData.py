@@ -182,6 +182,9 @@ class FileConverter (multiprocessing.Process):
             args: Namespace containing command-line arguments, to configure the
                 reading and writing of files.
         """
+  msk = (data[var_pt] > 10.) & (data[var_m] > 10.) # @TODO: Generalise?                           
+    data = data[msk]
+
 
         # Unpack input arguments
         path, key, args = vargs

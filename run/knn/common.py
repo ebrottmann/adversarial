@@ -15,15 +15,17 @@ from adversarial.utils import wpercentile, loadclf, garbage_collect
 from adversarial.profile import profile
 
 # Common definition(s)
-VAR  = 'lead_jet_C1_02'   # 'D2' 'NN' | Substructure variable to decorrelate
-EFF  = 2     # '95' | Fixed backround efficiency at which to perform decorrelation
-MODEL = 'A2000'
+VAR  = 'jet_ungrtrk500'   # 'D2' 'NN' | Substructure variable to decorrelate
+EFF  = 0.5    # '95' | Fixed backround efficiency at which to perform decorrelation
+MODEL = 'data_mjj' #'All signal models'
+FIT = 'knn1D'
+FIT_RANGE = (0, 7000)
 VARX = 'dijetmass'  # X-axis variable from which to decorrelate
-VARY = 'lead_jet_pt'   # Y-axis variable from which to decorrelate
+VARY = 'dijetmass'   # Y-axis variable from which to decorrelate
 VARS = [VARX, VARY]
 AXIS = {      # Dict holding (num_bins, axis_min, axis_max) for axis variables
-    'dijetmass': (50, 100, 5000.),
-    'lead_jet_pt':  (20, 200., 2200.),
+    'dijetmass': (20, 100., 8000.),
+    'dijetmass':  (20, 100., 8000.),
 }
 
 #### ________________________________________________________________________
@@ -34,7 +36,7 @@ AXIS = {      # Dict holding (num_bins, axis_min, axis_max) for axis variables
 
 
 @garbage_collect
-def standardise (array, y=None):
+def standardise (array, y=None, rank=None):
     """
     Standardise axis-variables for kNN regression.
 
@@ -47,7 +49,17 @@ def standardise (array, y=None):
 
     # If DataFrame, extract relevant columns and call method again.
     if isinstance(array, pd.DataFrame):
-        X = array[[VARX, VARY]].values.astype(np.float)
+        if rank is None:
+            X = array[[VARX, VARY]].values.astype(np.float)
+        elif 'lead' in rank:
+            X = array[[VARX, VARY]].values.astype(np.float)
+            #X = array[[VARX, 'lead_'+VARY]].values.astype(np.float)
+        elif 'sub' in rank:
+            X = array[[VARX, VARY]].values.astype(np.float)
+            #X = array[[VARX, 'sub_'+VARY]].values.astype(np.float)
+        else:
+            X = array[[VARX, VARY]].values.astype(np.float)
+            print "Bad rank given to run.knn.commen.standardise?"
         return standardise(X)
 
     # If receiving separate arrays
@@ -75,6 +87,7 @@ def standardise (array, y=None):
     return X
 
 
+
 @profile
 def add_knn (data, feat=VAR, newfeat=None, path=None):
     """
@@ -89,18 +102,33 @@ def add_knn (data, feat=VAR, newfeat=None, path=None):
 
     # Check(s)
     assert path is not None, "add_knn: Please specify a model path."
+
     if newfeat is None:
         newfeat = '{}kNN'.format(feat)
         pass
 
     # Prepare data array
-    X = standardise(data)
+    if ('1D' in FIT) or ('lin' in FIT):
+        X = data[VARX].values.astype(np.float)
+        X = X.reshape(-1,1)
+    else:
+        X = standardise(data, rank=newfeat)
 
     # Load model
     knn = loadclf(path)
 
     # Add new classifier to data array
-    data[newfeat] = pd.Series(data[feat] - knn.predict(X).flatten(), index=data.index)
+
+    if 'lead' in newfeat:
+        data[newfeat] =  pd.Series(data['lead_'+feat] - knn.predict(X), index=data.index) #predict(X).flatten()
+    elif 'sub' in newfeat:
+        data[newfeat] =  pd.Series(data['sub_'+feat] - knn.predict(X), index=data.index)  #predict(X).flatten()
+    else:
+        print "Something wrong with the newfeat name?"
+        print "Check shapes: ", data[feat].shape, knn.predict(X).flatten().shape
+
+        data[newfeat] = pd.Series(data[feat] - knn.predict(X).flatten(), index=data.index)
+
     return
 
 
@@ -129,7 +157,7 @@ def fill_profile (data):
 
         # Percentile
         perc = np.nan
-        if np.sum(msk) > 20:  # Ensure sufficient statistics for meaningful percentile
+        if np.sum(msk) > 10:  # Ensure sufficient statistics for meaningful percentile. Was 20
             perc = wpercentile(data=data.loc[msk, VAR].values, percents=100-EFF, weights=data.loc[msk, 'weight'].values) #wpercentile
             pass
 
@@ -144,7 +172,7 @@ def fill_profile (data):
         pass
 
     # Normalise arrays
-    x,y = standardise(x,y)
+    x,y = standardise(x,y, rank=None)
 
     # Filter out NaNs
     msk = ~np.isnan(z)
@@ -152,3 +180,48 @@ def fill_profile (data):
 
 
     return profile, (x,y,z)
+
+@profile
+def fill_profile_1D (data):
+    """Fill ROOT.TH2F with the measured, weighted values of the `EFF`-percentile
+    of the background `VAR`. """
+
+    # Define arrays
+    shape   = AXIS[VARX][0]
+    bins    = np.linspace(AXIS[VARX][1], AXIS[VARX][2], AXIS[VARX][0] + 1, endpoint=True) 
+    x, y, e = (np.zeros(shape) for _ in range(3))
+
+    # Create `profile` histogram
+    profile = ROOT.TH1F('profile', "", len(bins)-1, bins)
+
+    # Fill profile
+    for i in (range(shape)):
+
+        # Masks
+        msk = (data[VARX] > bins[i]) & (data[VARX] <= bins[i+1])
+
+        # Percentile
+        perc = np.nan
+        if np.sum(msk) > 20:  # Ensure sufficient statistics for meaningful percentile. Was 20
+            perc = wpercentile(data=data.loc[msk, VAR].values, percents=100-EFF, weights=data.loc[msk, 'weight'].values) #wpercentile
+            pass
+
+        x[i] = np.mean([bins[i], bins[i+1]])
+        y[i] = perc
+        e[i] = np.sqrt(np.sum(msk))/np.sum(msk)
+                
+        # Set non-zero bin content
+        if perc != np.nan:
+            profile.SetBinContent(i+1, perc)
+            pass
+        pass
+
+    # Normalise array
+    # x = standardise(x, rank=None)
+
+    # Filter out NaNs
+    msk = ~np.isnan(y)
+    x, y, e = x[msk], y[msk], y[msk]
+
+
+    return profile, (x,y,e)

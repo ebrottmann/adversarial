@@ -62,8 +62,22 @@ def main (args):
     # --------------------------------------------------------------------------
     # -- k-nearest neighbour
     #kNN_var = 'D2-k#minusNN'
-    #kNN_var = 'ntrk-knn'
-    kNN_var = 'C1_02-knn'
+    #kNN_var = 'C1_02-knn'
+    #base_var = 'sub_jet_ntrk'
+    #kNN_var = base_var.replace('sub_jet_', '') + '-knn'
+
+    #base_var = ['lead_jet_ungrtrk500', 'sub_jet_ungrtrk500']
+    #kNN_var = [var.replace('jet', 'knn') for var in base_var]
+
+    base_var = 'jet_ungrtrk500'
+    kNN_var = base_var.replace('jet', 'knn')
+
+
+    #base_var = ['jet_ungrtrk500']
+    #kNN_var = [var.replace('jet', 'knn') for var in base_var]
+
+    #base_var = ['ntrk_sum']
+    #kNN_var = [var + '-knn' for var in base_var]
 
     def meaningful_digits (number):
         digits = 0
@@ -76,7 +90,7 @@ def main (args):
     # -- Adversarial neural network (ANN) scan
     lambda_reg  = 10.
     lambda_regs = sorted([1., 3., 10.])
-    ann_vars    = list()
+å ham har jeg talt med løbende. For mange dage siden har vi talt om, om man kunne bruge grundlovsdag, og hvordan det ville hænge sammen med de frister, der er. In    ann_vars    = list()
     lambda_strs = list()
     for lambda_reg_ in lambda_regs:
         lambda_str = meaningful_digits(lambda_reg_).replace('.', 'p')
@@ -98,22 +112,24 @@ def main (args):
     """
     # Tagger feature collection
     #tagger_features = ['Tau21','Tau21DDT', 'D2', kNN_var, 'D2', 'D2CSS', 'NN', ann_var, 'Adaboost', uboost_var]
-    #tagger_features = ['lead_jet_ntrk', kNN_var]
-    tagger_features = ['lead_jet_C1_02', kNN_var]
-
+    #tagger_features = ['lead_jet_C1_02', kNN_var]
+    tagger_features = ['lead_' + base_var, 'lead_' + kNN_var, 'sub_' + base_var, 'sub_' + kNN_var]
+    
+    #tagger_features = base_var + kNN_var
 
     # Add variables
     # --------------------------------------------------------------------------
+    
     with Profile("Add variables"):
-
-        # D2-kNN
-        from run.knn.common import add_knn, VAR as kNN_basevar, EFF as kNN_eff
-        print "k-NN base variable: {} (cp. {})".format(kNN_basevar, kNN_var)
-        add_knn(data, newfeat=kNN_var, path='models/knn/knn_{}_{}_{}.pkl.gz'.format(kNN_basevar, kNN_eff, MODEL))
+        #for i in range(len(base_var)):
+        from run.knn.common import add_knn, MODEL as sigModel, VAR as kNN_basevar, EFF as kNN_eff 
+        print "k-NN base variable: {} (cp. {})".format(base_var, kNN_var)
+        add_knn(data, newfeat='lead_'+kNN_var, path='models/knn/knn_{}_{}_{}.pkl.gz'.format(base_var, kNN_eff, sigModel))
+        add_knn(data, newfeat='sub_'+kNN_var, path='models/knn/knn_{}_{}_{}.pkl.gz'.format(base_var, kNN_eff, sigModel))
 
 
     # Remove unused variables
-    used_variables = set(tagger_features + ['lead_jet_m', 'lead_jet_pt', 'lead_jet_ntrk', 'lead_jet_C1_02', 'dijetmass', kNN_var, 'weight'])
+    used_variables = set(tagger_features + ['lead_jet_m', 'lead_jet_pt', 'dijetmass', 'weight'])
     unused_variables = [var for var in list(data) if var not in used_variables]
     data.drop(columns=unused_variables)
     gc.collect()

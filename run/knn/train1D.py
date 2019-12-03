@@ -10,6 +10,7 @@ import pickle
 # Scientific import(s)
 import numpy as np
 from sklearn.neighbors import KNeighborsRegressor
+from sklearn.linear_model import LinearRegression
 from sklearn.metrics import roc_curve
 
 # Project import(s)
@@ -30,7 +31,7 @@ def main (args):
     args, cfg = initialise(args)
 
     # Load data
-    data, _, _ = load_data('data/' + args.input) #Train=True removed since we use the data file
+    data, _, _ = load_data('data/' + args.input) #, Train=True) removed since we use the data file
 
     # -------------------------------------------------------------------------
     ####
@@ -61,21 +62,52 @@ def main (args):
 
     # Filling profile
     data = data[data['signal'] == 0]
-    profile_meas, (x,y,z) = fill_profile(data)
+    profile_meas, (x,y,err) = fill_profile_1D(data)
 
     # Format arrays
-    X = np.vstack((x.flatten(), y.flatten()))
-    X = X.T
-    Y = z.flatten()
+    X = x.reshape(-1,1)
+    weights = 1/err
 
+    print X
     # Fit KNN regressor
-    print "debugging more: x.shape = ", X.shape,", y.ndim = ", Y.ndim
+    if 'knn1D'==FIT:
+        knn = KNeighborsRegressor(5, weights='distance')
+        knn.fit(X, y)#.predict(X)
 
-    knn = KNeighborsRegressor(weights='distance')
-    knn.fit(X, Y)
+    elif 'knn1D_v2' in FIT:
+        knn = KNeighborsRegressor(5, weights='uniform')
+        knn.fit(X, y)#.predict(X)
 
-    # Save KNN classifier
-    saveclf(knn, 'models/knn/knn_{:s}_{}_{}.pkl.gz'.format(VAR, EFF, MODEL))
+    elif 'knn1D_v3' in FIT:
+        knn = KNeighborsRegressor(2, weights='uniform')
+        knn.fit(X, y)#.predict(X)
+
+    elif 'knn1D_v4' in FIT:
+        knn = KNeighborsRegressor(2, weights='distance')
+        knn.fit(X, y)#.predict(X)
+
+
+    # Create scikit-learn transform
+    elif 'lin' in FIT:
+        knn = LinearRegression()
+        knn.fit(X,y, weights)
+
+    else:
+        print "Weird FIT type chosen" 
+        #coef_val = np.polyfit(x, y, deg=1, w=weights)
+
+        #knn.coef_      = np.array([coef_val[0]])
+        #knn.intercept_ = np.array([coef_val[1]]) #[-coef_val[0] * FIT_RANGE[0]])
+        #knn.offset_    = np.array([coef_val[0] * FIT_RANGE[0] + coef_val[1]])
+        
+        print "Fitted function:"
+        print "  coef: {}".format(knn.coef_)
+        print "  intercept:      {}".format(knn.intercept_)
+        
+
+    # Save DDT transform
+    saveclf(knn, 'models/knn/{}_{:s}_{}_{}.pkl.gz'.format(FIT, VAR, EFF, MODEL))
+
 
     return 0
 

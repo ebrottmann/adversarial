@@ -21,8 +21,7 @@ import rootplotting as rp
 rp.colours.pop(3)  # To remove unused colour from list
 
 #Signal model
-MODEL = 'A2000'
-XVAR = 'lead_jet_pt'
+MODEL = 'allSig'
 
 # Global variable definition(s)
 HISTSTYLE = {  # key = signal / passing
@@ -35,8 +34,8 @@ HISTSTYLE = {  # key = signal / passing
     False: {
         'fillcolor': rp.colours[1],
         'linecolor': rp.colours[1],
-        'fillstyle': 1001,
-        'alpha': 0.5,
+        'fillstyle': 1001, #3345,
+        'alpha': 0.75,
         }
     }
 
