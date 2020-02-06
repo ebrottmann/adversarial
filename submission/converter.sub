@@ -1,0 +1,11 @@
+executable            = run_converter.sh
+output                = output/converter.$(ClusterId).$(ProcId).out
+error                 = error/converter.$(ClusterId).$(ProcId).err
+log                   = logfiles/converter.$(ClusterId).log
++JobFlavour	      = "tomorrow"
+RequestMemory         = 10000MB
+WHEN_TO_TRANSFER_OUTPUT = ON_EXIT_OR_EVICT
++SpoolOnEvict         = False
+transfer_output_files = /afs/cern.ch/work/e/ehansen/public/adversarial/submission/djr_LCTopo_1.h5
+queue
+
