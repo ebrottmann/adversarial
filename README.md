@@ -12,7 +12,8 @@ neural networks. All information, guides, etc. can be found in the project
    * python -m prepro.converterDJR_data 
 
 1.1) If the input files are too big/many, there's an example script for submitting the jobs to the lxplus batch system in the submission folder. 
-     * condor_submit submission/converter.sub
+
+   * condor_submit submission/converter.sub
 
 2) To construct the fixed-efficiency ntrk variable, ntrk_epsilon, we use the kNN paakage, and run the "training" on data in oder to be less sensitive to MC mismodelling. 
    * python -m run.knn.train1D --input djr_LCTopo_data.h5
