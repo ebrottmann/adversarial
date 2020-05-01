@@ -11,7 +11,13 @@ import pickle
 import numpy as np
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.pipeline import make_pipeline
+from sklearn.linear_model import Ridge
 from sklearn.metrics import roc_curve
+
+from scipy.optimize import curve_fit
+from scipy.special import erf
 
 # Project import(s)
 from adversarial.utils import parse_args, initialise, load_data, mkdir, saveclf  #, initialise_backend
@@ -21,6 +27,10 @@ from adversarial.constants import *
 
 # Local import(s)
 from .common import *
+
+def func(x, a, b, c):
+    """ error function"""
+    return a * erf(b*(x+c))
 
 
 # Main function definition
@@ -54,7 +64,7 @@ def main (args):
 
     # Compute background efficiency at sig. eff. = 50%
     eff_sig = 0.10
-    fpr, tpr, thresholds = roc_curve(data['signal'], data[VAR], sample_weight=data['weight'])
+    fpr, tpr, thresholds = roc_curve(data['signal'], data[VAR], sample_weight=data['TotalEventWeight'])
     idx = np.argmin(np.abs(tpr - eff_sig))
     print "Background acceptance @ {:.2f}% sig. eff.: {:.2f}% ({} > {:.2f})".format(eff_sig * 100., (fpr[idx]) * 100., VAR, thresholds[idx]) #changed from 1-fpr[idx]
     #print "Signal efficiency @ {:.2f}% bkg. acc.: {:.2f}% ({} > {:.2f})".format(eff_sig * 100., (fpr[idx]) * 100., VAR, thresholds[idx]) #changed from 1-fpr[idx]
@@ -83,14 +93,39 @@ def main (args):
         knn.fit(X, y)#.predict(X)
 
     elif 'knn1D_v4' in FIT:
-        knn = KNeighborsRegressor(2, weights='distance')
+        knn = KNeighborsRegressor(3, weights='distance')
         knn.fit(X, y)#.predict(X)
 
+    elif 'poly2' in FIT:
+        knn = make_pipeline(PolynomialFeatures(degree=2), Ridge())
+        knn.fit(X, y)#.predict(X)
+        #knn1 = PolynomialFeatures(degree=2)
+        #knn1.fit(X, y)
+        #X_poly = knn1.fit_transform(X)
+        #knn = LinearRegression() #fit_intercept=False)
+        #knn.fit(X_poly, y, weights)
+        #score = round(reg.score(X_poly, y), 4)
+        #coef = reg.coef_
+        #intercept = reg.intercept_
+
+        #print score, coef, intercept
+        #knn.fit(X, y)#.predict(X)
+        #print "Fit parameters: ", knn.transform(X).shape #get_feature_names() #get_params() #knn.coef_
+
+    elif 'poly3' in FIT:
+        knn = make_pipeline(PolynomialFeatures(degree=3), Ridge())
+        knn.fit(X, y)#.predict(X)
 
     # Create scikit-learn transform
     elif 'lin' in FIT:
         knn = LinearRegression()
         knn.fit(X,y, weights)
+
+
+    elif 'erf' in FIT:
+        knn, pcov = curve_fit(func, x, y, p0=[73, 0.0004, 2000])
+        print "ERF: ", knn
+        
 
     else:
         print "Weird FIT type chosen" 
@@ -108,6 +143,15 @@ def main (args):
     # Save DDT transform
     saveclf(knn, 'models/knn/{}_{:s}_{}_{}.pkl.gz'.format(FIT, VAR, EFF, MODEL))
 
+    # Save fit parameters to a ROOT file 
+
+    #TCoef = ROOT.TVector3(coef[0], coef[1], coef[2]) 
+    #outFile = ROOT.TFile.Open("models/{}_jet_ungrtrk500_eff{}_stat{}_data.root".format(FIT, EFF, MIN_STAT),"RECREATE")
+    #outFile.cd()
+    #TCoef.SetName("coefficients")
+    #TCoef.Write()
+    #outFile.Close()
+    
 
     return 0
 

@@ -9,6 +9,7 @@ import itertools
 import ROOT
 import numpy as np
 import pandas as pd
+from scipy.special import erf
 
 # Project import(s)
 from adversarial.utils import wpercentile, loadclf, garbage_collect
@@ -16,16 +17,18 @@ from adversarial.profile import profile
 
 # Common definition(s)
 VAR  = 'jet_ungrtrk500'   # 'D2' 'NN' | Substructure variable to decorrelate
-EFF  = 0.5    # '95' | Fixed backround efficiency at which to perform decorrelation
-MODEL = 'data_mjj' #'All signal models'
-FIT = 'knn1D'
-FIT_RANGE = (0, 7000)
-VARX = 'dijetmass'  # X-axis variable from which to decorrelate
-VARY = 'dijetmass'   # Y-axis variable from which to decorrelate
+EFF  = 1.0    # Fixed backround single-jet efficiency at which to perform decorrelation
+MODEL = 'mcCR' #'All signal models'
+INPUT = 'mcCR'
+FIT = 'poly3'
+MIN_STAT = 50
+FIT_RANGE = (1000, 6000)
+VARX = 'mjj'  # X-axis variable from which to decorrelate
+VARY = 'mjj'   # Y-axis variable from which to decorrelate
 VARS = [VARX, VARY]
 AXIS = {      # Dict holding (num_bins, axis_min, axis_max) for axis variables
-    'dijetmass': (20, 100., 8000.),
-    'dijetmass':  (20, 100., 8000.),
+    'mjj': (50, 1000., 6000.),
+    'mjj':  (50, 1000., 6000.),
 }
 
 #### ________________________________________________________________________
@@ -36,6 +39,14 @@ AXIS = {      # Dict holding (num_bins, axis_min, axis_max) for axis variables
 
 
 @garbage_collect
+
+def func(x, a, b, c):
+    """ error function"""
+    y = []
+    for x in range(len(x)):
+        y.append(a * erf(b*(x+c))) 
+    return y 
+
 def standardise (array, y=None, rank=None):
     """
     Standardise axis-variables for kNN regression.
@@ -87,7 +98,6 @@ def standardise (array, y=None, rank=None):
     return X
 
 
-
 @profile
 def add_knn (data, feat=VAR, newfeat=None, path=None):
     """
@@ -108,26 +118,37 @@ def add_knn (data, feat=VAR, newfeat=None, path=None):
         pass
 
     # Prepare data array
-    if ('1D' in FIT) or ('lin' in FIT):
+    if ('1D' in FIT) or ('lin' in FIT) or ('poly' in FIT) or ('erf' in FIT):
         X = data[VARX].values.astype(np.float)
         X = X.reshape(-1,1)
+        
     else:
         X = standardise(data, rank=newfeat)
 
     # Load model
     knn = loadclf(path)
-
+    
     # Add new classifier to data array
 
-    if 'lead' in newfeat:
-        data[newfeat] =  pd.Series(data['lead_'+feat] - knn.predict(X), index=data.index) #predict(X).flatten()
-    elif 'sub' in newfeat:
-        data[newfeat] =  pd.Series(data['sub_'+feat] - knn.predict(X), index=data.index)  #predict(X).flatten()
-    else:
-        print "Something wrong with the newfeat name?"
-        print "Check shapes: ", data[feat].shape, knn.predict(X).flatten().shape
+    if 'erf' in FIT: 
+        print "HEJ ",  knn[0], knn[1], knn[2]
+        if 'lead' in newfeat:
+            data[newfeat] =  pd.Series(data['lead_'+feat] - func(X, knn[0], knn[1], knn[2]), index=data.index) #predict(X).flatten()
+        if 'sub' in newfeat:
+            data[newfeat] =  pd.Series(data['sub_'+feat] - func(X, knn[0], knn[1], knn[2]), index=data.index) #predict(X).flatten()
+        else:
+            data[newfeat] =  pd.Series(data[feat] - func(X, knn[0], knn[1], knn[2]), index=data.index) #predict(X).flatten()
 
-        data[newfeat] = pd.Series(data[feat] - knn.predict(X).flatten(), index=data.index)
+    else:
+        if 'lead' in newfeat:
+            data[newfeat] =  pd.Series(data['lead_'+feat] - knn.predict(X), index=data.index) #predict(X).flatten()
+        elif 'sub' in newfeat:
+            data[newfeat] =  pd.Series(data['sub_'+feat] - knn.predict(X), index=data.index)  #predict(X).flatten()
+        else:
+            print "Something wrong with the newfeat name?"
+            #print "Check shapes !!: ", data[feat].shape, knn.predict(X).flatten().shape
+
+            data[newfeat] = pd.Series(data[feat] - knn.predict(X).flatten(), index=data.index) #
 
     return
 
@@ -144,6 +165,7 @@ def fill_profile (data):
 
     # Create `profile` histogram
     profile = ROOT.TH2F('profile', "", len(bins[0]) - 1, bins[0].flatten('C'), len(bins[1]) - 1, bins[1].flatten('C'))
+    #data['weight1'] =  data['sample_weight']*data['MC_weight']
 
     # Fill profile
     for i,j in itertools.product(*map(range, shape)):
@@ -157,8 +179,8 @@ def fill_profile (data):
 
         # Percentile
         perc = np.nan
-        if np.sum(msk) > 10:  # Ensure sufficient statistics for meaningful percentile. Was 20
-            perc = wpercentile(data=data.loc[msk, VAR].values, percents=100-EFF, weights=data.loc[msk, 'weight'].values) #wpercentile
+        if np.sum(msk) > 20:  # Ensure sufficient statistics for meaningful percentile. Was 20
+            perc = wpercentile(data=data.loc[msk, VAR].values, percents=100-EFF, weights=data.loc[msk, 'TotalEventWeight'].values) #wpercentile
             pass
 
         x[i,j] = np.mean(edges[0])
@@ -187,12 +209,42 @@ def fill_profile_1D (data):
     of the background `VAR`. """
 
     # Define arrays
-    shape   = AXIS[VARX][0]
-    bins    = np.linspace(AXIS[VARX][1], AXIS[VARX][2], AXIS[VARX][0] + 1, endpoint=True) 
+    #bins    = np.linspace(AXIS[VARX][1], AXIS[VARX][2], AXIS[VARX][0] + 1, endpoint=True)
+    # Make variable sized bins
+    #bins = np.linspace(AXIS[VARX][1], 4000, 40, endpoint=True)
+    #bins = np.append(bins, [4500, 5000, 5500, 6000, 6500, 7000, 7500, 8000])
+
+    # Build bin structure with at least ?50 event in each bin 
+    # and bin widths of at least AXIS[VARX][0]
+    
+    minBinSize = 100 #AXIS[VARX][0]
+    binEdge = AXIS[VARX][2]
+    binList = []
+    binList.append(binEdge)
+    k=1
+    while binEdge-k*minBinSize > AXIS[VARX][1]:
+        msk = (data[VARX] > binEdge-k*minBinSize) & (data[VARX] <= binEdge)
+        if (np.sum(msk)*EFF/100. > MIN_STAT):
+            binEdge -= k*minBinSize
+            binList.append(binEdge)
+            k=1
+        else: 
+            k+=1
+
+    binList.append(AXIS[VARX][1])
+    binList.reverse()
+    bins = np.array(binList)
+    print "Bins: ", len(bins), bins
+
+    shape = len(bins) -1 #AXIS[VARX][0] # 
     x, y, e = (np.zeros(shape) for _ in range(3))
 
     # Create `profile` histogram
     profile = ROOT.TH1F('profile', "", len(bins)-1, bins)
+
+    #if INPUT == "mc":
+    #    data.loc[:,'TotalEventWeight'] /=  139000000.
+
 
     # Fill profile
     for i in (range(shape)):
@@ -201,15 +253,19 @@ def fill_profile_1D (data):
         msk = (data[VARX] > bins[i]) & (data[VARX] <= bins[i+1])
 
         # Percentile
-        perc = np.nan
-        if np.sum(msk) > 20:  # Ensure sufficient statistics for meaningful percentile. Was 20
-            perc = wpercentile(data=data.loc[msk, VAR].values, percents=100-EFF, weights=data.loc[msk, 'weight'].values) #wpercentile
-            pass
+        #perc = np.nan
+        #if np.sum(msk) > 20:  # Ensure sufficient statistics for meaningful percentile. Was 20
+        perc = wpercentile(data=data.loc[msk, VAR].values, percents=100-EFF, weights=data.loc[msk, 'TotalEventWeight'].values) #wpercentile
+        #   pass
 
         x[i] = np.mean([bins[i], bins[i+1]])
         y[i] = perc
-        e[i] = np.sqrt(np.sum(msk))/np.sum(msk)
-                
+        if np.sum(msk) > 0:
+            e[i] = np.sqrt(np.sum(msk))/np.sum(msk)
+        else:
+            print "Bin ", i, " has np.sum(msk) < 20. Weird."
+            e[i] = 0
+
         # Set non-zero bin content
         if perc != np.nan:
             profile.SetBinContent(i+1, perc)
